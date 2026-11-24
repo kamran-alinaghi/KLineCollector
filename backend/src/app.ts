@@ -9,7 +9,6 @@ import {
 } from "./services/dataset.js";
 import type { CollectionRequest, FuturesSymbol } from "./types.js";
 import { analyzeDatasetMovements } from "./services/movement-analysis.js";
-import { analyzeDatasetMovements } from "./services/movement-analysis.js";
 
 let activeSymbols: FuturesSymbol[] = [];
 
