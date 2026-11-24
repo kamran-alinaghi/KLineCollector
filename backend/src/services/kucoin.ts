@@ -8,20 +8,45 @@ type RawKLine = Array<number | string>;
 
 let lastKlineRequestAt = 0;
 
-async function waitForKlineRequestSlot(): Promise<void> {
+function abortError(): Error {
+  const error = new Error("KLine request was aborted.");
+  error.name = "AbortError";
+  return error;
+}
+
+async function waitForKlineRequestSlot(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throw abortError();
   const elapsed = Date.now() - lastKlineRequestAt;
   const remaining = config.kucoinKlineRequestDelayMs - elapsed;
   if (lastKlineRequestAt > 0 && remaining > 0) {
-    await new Promise((resolve) => setTimeout(resolve, remaining));
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, remaining);
+      const onAbort = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        reject(abortError());
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      if (signal?.aborted) onAbort();
+    });
   }
+  if (signal?.aborted) throw abortError();
   lastKlineRequestAt = Date.now();
 }
 
-async function kucoinGet<T>(endpoint: string, params?: Record<string, string | number>): Promise<T> {
+async function kucoinGet<T>(
+  endpoint: string, params?: Record<string, string | number>, signal?: AbortSignal
+): Promise<T> {
   const url = new URL(endpoint, config.kucoinBaseUrl);
   for (const [key, value] of Object.entries(params ?? {})) url.searchParams.set(key, String(value));
 
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal
+  });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new Error(`KuCoin request failed (${response.status}): ${body || response.statusText}`);
@@ -39,12 +64,12 @@ export async function fetchActiveFuturesSymbols(): Promise<string[]> {
 }
 
 export async function fetchKLinesPage(
-  symbol: string, timeframe: Timeframe, fromMs: number, toMs: number
+  symbol: string, timeframe: Timeframe, fromMs: number, toMs: number, signal?: AbortSignal
 ): Promise<KLine[]> {
-  await waitForKlineRequestSlot();
+  await waitForKlineRequestSlot(signal);
   const rows = await kucoinGet<RawKLine[]>("/api/v1/kline/query", {
     symbol, granularity: TIMEFRAMES[timeframe], from: fromMs, to: toMs
-  });
+  }, signal);
   return rows.map((row) => {
     if (row.length < 7) throw new Error(`KuCoin returned an invalid KLine row for ${symbol}`);
     const values = row.slice(0, 7).map(Number);

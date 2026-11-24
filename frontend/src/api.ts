@@ -34,5 +34,9 @@ export const api = {
   ),
   startCollection: (input: { timeframe: Timeframe; startTime: string; endTime: string }) =>
     request<CollectionJob>("/api/klines/collect", { method: "POST", body: JSON.stringify(input) }),
+  cancelCollection: (jobId: string) =>
+    request<{ accepted: boolean; job: CollectionJob }>(
+      `/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" }
+    ),
   jobEventsUrl: (jobId: string) => `${API_BASE}/api/jobs/${encodeURIComponent(jobId)}/events`
 };

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity, AlertCircle, AlertTriangle, ArrowDownToLine, BarChart3, Check,
   CheckCircle2, ChevronDown, Clock3, Database, FileJson, FolderOpen,
-  LoaderCircle, RefreshCw, Save, Server, Signal, XCircle
+  LoaderCircle, RefreshCw, Save, Server, Signal, StopCircle, XCircle
 } from "lucide-react";
 import { api } from "./api";
 import type { CollectionJob, DatasetSummary, Timeframe } from "./types";
@@ -24,6 +24,7 @@ export default function App() {
   const [endTime, setEndTime] = useState(() => localDateTime(new Date()));
   const [job, setJob] = useState<CollectionJob | null>(null);
   const [starting, setStarting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [activeDataset, setActiveDataset] = useState<DatasetSummary | null>(null);
   const [saving, setSaving] = useState(false);
@@ -67,12 +68,15 @@ export default function App() {
 
   const applyJobUpdate = useCallback((next: CollectionJob) => {
     setJob(next);
-    if (next.status === "completed" || next.status === "failed") {
+    if (next.status === "completed" || next.status === "cancelled" || next.status === "failed") {
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
+      setCancelling(false);
       void refreshDatasets().catch(() => undefined);
       if (next.status === "failed") {
         notify({ kind: "error", message: next.error ?? "The collection job failed." });
+      } else if (next.status === "cancelled") {
+        notify({ kind: "info", message: `Collection aborted. Kept data for ${number(next.successfulSymbols)} completed symbol(s) in memory.` });
       } else if (next.outcome === "success") {
         notify({ kind: "success", message: `Collection completed: ${number(next.successfulSymbols)} symbols processed successfully.` });
       } else if (next.outcome === "partial") {
@@ -117,6 +121,18 @@ export default function App() {
       notify({ kind: "error", message: error instanceof Error ? error.message : "Unable to start collection." });
     } finally {
       setStarting(false);
+    }
+  };
+
+  const abortCollection = async () => {
+    if (!job || !collectionRunning || cancelling) return;
+    setCancelling(true);
+    try {
+      await api.cancelCollection(job.jobId);
+      notify({ kind: "info", message: "Abort requested. Waiting for the backend to stop the active request…" });
+    } catch (error) {
+      setCancelling(false);
+      notify({ kind: "error", message: error instanceof Error ? error.message : "Unable to abort collection." });
     }
   };
 
@@ -232,7 +248,7 @@ export default function App() {
             <label className="field"><span>Start date &amp; time</span><input type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} disabled={collectionRunning} /></label>
             <label className="field"><span>End date &amp; time</span><input type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} disabled={collectionRunning} /></label>
           </div>
-          <div className="collection-note"><Clock3 size={15} /> Symbols are processed sequentially with a 20-second pause between symbols.</div>
+          <div className="collection-note"><Clock3 size={15} /> KLine requests are throttled by the backend configuration.</div>
           <button className="button button-dark full-width" onClick={startCollection} disabled={starting || collectionRunning || symbols.length === 0}>
             {starting || collectionRunning ? <LoaderCircle className="spin" size={17} /> : <ArrowDownToLine size={17} />}
             {collectionRunning ? "Collection running…" : starting ? "Starting…" : "Start KLine collection"}
@@ -246,8 +262,8 @@ export default function App() {
           <div className="panel-heading progress-heading">
             <div className="section-icon green"><Signal size={18} /></div>
             <div><h2>Collection progress</h2><p>{job?.jobId ?? "Preparing job"}</p></div>
-            <span className={collectionRunning ? "status-pill status-running" : job?.outcome === "success" ? "status-pill status-ready" : "status-pill status-warning"}>
-              {collectionRunning ? "In progress" : job?.status === "failed" || job?.outcome === "failed" ? "Failed" : job?.outcome === "partial" ? "Completed with errors" : "Completed"}
+            <span className={collectionRunning ? "status-pill status-running" : job?.status === "completed" && job.outcome === "success" ? "status-pill status-ready" : "status-pill status-warning"}>
+              {collectionRunning ? "In progress" : job?.status === "cancelled" ? "Cancelled" : job?.status === "failed" || job?.outcome === "failed" ? "Failed" : job?.outcome === "partial" ? "Completed with errors" : "Completed"}
             </span>
           </div>
           {job && <>
@@ -259,8 +275,13 @@ export default function App() {
               <div><Clock3 size={16} /><strong>{job.totalSymbols - job.processedSymbols}</strong><span>Remaining</span></div>
             </div>
             {job.currentSymbol && <div className="current-symbol"><LoaderCircle className="spin" size={16} /> Processing <strong>{job.currentSymbol}</strong></div>}
+            {collectionRunning && <button className="button button-danger abort-button" onClick={abortCollection} disabled={cancelling}>
+              {cancelling ? <LoaderCircle className="spin" size={16} /> : <StopCircle size={16} />}
+              {cancelling ? "Aborting…" : "Abort collection"}
+            </button>}
             {job.failedSymbolNames.length > 0 && <details className="failed-list"><summary>Failed symbols ({job.failedSymbolNames.length})</summary><p>{job.failedSymbolNames.join(", ")}</p></details>}
             {job.status === "completed" && <div className="completion-message"><Check size={17} /> Collection finished. You can now save the active dataset.</div>}
+            {job.status === "cancelled" && <div className="cancelled-message"><StopCircle size={17} /> Collection was aborted. Data from completed symbols remains available to save.</div>}
             {job.status === "failed" && <div className="error-message">{job.error}</div>}
           </>}
         </section>

@@ -6,6 +6,7 @@ import { setActiveDataset } from "./dataset.js";
 
 const jobs = new Map<string, CollectionJob>();
 const jobEvents = new Map<string, EventEmitter>();
+const abortControllers = new Map<string, AbortController>();
 let runningJobId: string | null = null;
 const now = () => new Date().toISOString();
 
@@ -29,6 +30,15 @@ export function subscribeToJob(jobId: string, listener: (job: CollectionJob) => 
 
 export function hasRunningJob(): boolean { return runningJobId !== null; }
 
+export function cancelCollection(jobId: string): CollectionJob | undefined {
+  const job = jobs.get(jobId);
+  if (!job) return undefined;
+  if (job.status === "pending" || job.status === "running") {
+    abortControllers.get(jobId)?.abort();
+  }
+  return getJob(jobId);
+}
+
 export function startCollection(request: CollectionRequest, symbols: string[]): CollectionJob {
   if (runningJobId) throw new Error("A KLine collection is already running.");
   if (symbols.length === 0) throw new Error("Fetch active futures symbols before starting a collection.");
@@ -41,8 +51,10 @@ export function startCollection(request: CollectionRequest, symbols: string[]): 
     failedSymbols: 0, currentSymbol: null, failedSymbolNames: [],
     progress: 0, createdAt: now(), updatedAt: now()
   };
+  const controller = new AbortController();
   jobs.set(jobId, job);
   jobEvents.set(jobId, new EventEmitter());
+  abortControllers.set(jobId, controller);
   runningJobId = jobId;
 
   const dataset: KLineDataset = {
@@ -53,57 +65,69 @@ export function startCollection(request: CollectionRequest, symbols: string[]): 
   // Starting a collection establishes a fresh active dataset; no file is written here.
   setActiveDataset(dataset);
 
-  void runCollection(job, dataset, [...symbols]).catch((error: unknown) => {
-    job.status = "failed";
-    job.error = error instanceof Error ? error.message : "Unexpected collection error.";
-    job.currentSymbol = null;
-    publish(job);
-    runningJobId = null;
-  });
+  void runCollection(job, dataset, [...symbols], controller.signal);
   return { ...job, failedSymbolNames: [] };
 }
 
-async function runCollection(job: CollectionJob, dataset: KLineDataset, symbols: string[]): Promise<void> {
-  job.status = "running";
-  publish(job);
-  const startMs = new Date(job.startTime).getTime();
-  const endMs = new Date(job.endTime).getTime();
-  const intervalMs = TIMEFRAMES[job.timeframe] * 60_000;
-  const pageSpanMs = intervalMs * 500;
-
-  for (let index = 0; index < symbols.length; index += 1) {
-    const symbol = symbols[index]!;
-    job.currentSymbol = symbol;
+async function runCollection(
+  job: CollectionJob, dataset: KLineDataset, symbols: string[], signal: AbortSignal
+): Promise<void> {
+  try {
+    job.status = "running";
     publish(job);
+    const startMs = new Date(job.startTime).getTime();
+    const endMs = new Date(job.endTime).getTime();
+    const intervalMs = TIMEFRAMES[job.timeframe] * 60_000;
+    const pageSpanMs = intervalMs * 500;
 
-    try {
-      const byTimestamp = new Map<number, (typeof dataset.symbols)[string]["klines"][number]>();
-      let cursor = startMs;
-      while (cursor <= endMs) {
-        const pageEnd = Math.min(endMs, cursor + pageSpanMs - 1);
-        const page = await fetchKLinesPage(symbol, job.timeframe, cursor, pageEnd);
-        for (const kline of page) {
-          if (kline.timestamp >= startMs && kline.timestamp <= endMs) byTimestamp.set(kline.timestamp, kline);
+    for (const symbol of symbols) {
+      if (signal.aborted) break;
+      job.currentSymbol = symbol;
+      publish(job);
+
+      try {
+        const byTimestamp = new Map<number, (typeof dataset.symbols)[string]["klines"][number]>();
+        let cursor = startMs;
+        while (cursor <= endMs && !signal.aborted) {
+          const pageEnd = Math.min(endMs, cursor + pageSpanMs - 1);
+          const page = await fetchKLinesPage(symbol, job.timeframe, cursor, pageEnd, signal);
+          if (signal.aborted) break;
+          for (const kline of page) {
+            if (kline.timestamp >= startMs && kline.timestamp <= endMs) byTimestamp.set(kline.timestamp, kline);
+          }
+          cursor = pageEnd + 1;
         }
-        cursor = pageEnd + 1;
+        if (signal.aborted) break;
+        dataset.symbols[symbol] = {
+          klines: [...byTimestamp.values()].sort((a, b) => a.timestamp - b.timestamp)
+        };
+        job.successfulSymbols += 1;
+      } catch (error) {
+        if (signal.aborted) break;
+        job.failedSymbols += 1;
+        job.failedSymbolNames.push(symbol);
+        console.error(`KLine collection failed for ${symbol}:`, error);
       }
-      dataset.symbols[symbol] = {
-        klines: [...byTimestamp.values()].sort((a, b) => a.timestamp - b.timestamp)
-      };
-      job.successfulSymbols += 1;
-    } catch (error) {
-      job.failedSymbols += 1;
-      job.failedSymbolNames.push(symbol);
-      console.error(`KLine collection failed for ${symbol}:`, error);
+
+      if (signal.aborted) break;
+      job.processedSymbols += 1;
+      job.currentSymbol = null;
+      publish(job);
     }
 
-    job.processedSymbols += 1;
+    if (signal.aborted) {
+      job.status = "cancelled";
+    } else {
+      job.status = "completed";
+      job.outcome = job.successfulSymbols === 0 ? "failed" : job.failedSymbols > 0 ? "partial" : "success";
+    }
+  } catch (error) {
+    job.status = "failed";
+    job.error = error instanceof Error ? error.message : "Unexpected collection error.";
+  } finally {
     job.currentSymbol = null;
     publish(job);
+    runningJobId = null;
+    abortControllers.delete(job.jobId);
   }
-
-  job.status = "completed";
-  job.outcome = job.successfulSymbols === 0 ? "failed" : job.failedSymbols > 0 ? "partial" : "success";
-  publish(job);
-  runningJobId = null;
 }

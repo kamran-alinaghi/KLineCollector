@@ -24,7 +24,7 @@ export interface KLineDataset {
   createdAt: string;
   symbols: Record<string, SymbolKLines>;
 }
-export type JobStatus = "pending" | "running" | "completed" | "failed";
+export type JobStatus = "pending" | "running" | "completed" | "cancelled" | "failed";
 export type JobOutcome = "success" | "partial" | "failed";
 export interface CollectionJob {
   jobId: string;

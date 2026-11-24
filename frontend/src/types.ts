@@ -15,7 +15,7 @@ export type Timeframe = typeof TIMEFRAMES[number]["value"];
 
 export interface CollectionJob {
   jobId: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "cancelled" | "failed";
   outcome?: "success" | "partial" | "failed";
   timeframe: Timeframe;
   startTime: string;

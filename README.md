@@ -18,10 +18,12 @@ Copy `backend/.env.example` to `backend/.env` to configure ports, CORS, KuCoin U
 ## Phase 1
 - Manually fetch all tradable KuCoin Futures contracts.
 - Collect KLines for every backend-cached symbol with a selected timeframe and date range.
-- Process symbols sequentially with a configurable 20-second minimum interval between KLine API requests (including pagination), which also spaces out requests for consecutive symbols.
+- Process symbols sequentially with a configurable minimum interval between KLine API requests (including pagination), which also spaces out requests for consecutive symbols.
 - Page KLine requests into windows of up to 500 intervals.
 - Stream job progress over SSE.
-- Skip failed symbols and continue.
+- Abort a collection from the frontend; the backend cancels an in-flight KuCoin request or pending throttle wait and does not start subsequent requests.
+- Keep data from fully completed symbols in the active in-memory dataset when a collection is aborted.
+- Skip failed symbols and continue when a request fails for reasons other than cancellation.
 - Keep the active dataset in backend memory.
 - Save manually; every save creates a new JSON file.
 - List and load saved files, replacing the active in-memory dataset.
@@ -40,6 +42,7 @@ Symbols, jobs, and the active dataset are memory-only and are cleared on backend
 - GET /api/symbols
 - POST /api/symbols/refresh
 - POST /api/klines/collect
+- POST /api/jobs/:jobId/cancel
 - GET /api/jobs/:jobId
 - GET /api/jobs/:jobId/events (SSE)
 - GET /api/datasets

@@ -49,6 +49,7 @@ h1{font:700 31px "Space Grotesk",sans-serif;letter-spacing:-1.1px;margin:9px 0 6
 .button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;transition:background .15s,border-color .15s}
 .button-primary{background:#315e9d;color:#fff}.button-primary:hover:not(:disabled){background:#274f87}
 .button-dark{background:#192d4b;color:#fff}.button-dark:hover:not(:disabled){background:#233f67}
+.button-danger{background:#b83e3e;color:#fff}.button-danger:hover:not(:disabled){background:#9f3030}
 .button-outline{background:#fff;color:#42638e;border-color:#dce4ef}.button-outline:hover:not(:disabled){background:#f4f7fb}
 .button-small{padding:7px 10px;font-size:10px}
 .full-width{width:100%}
@@ -81,9 +82,11 @@ h1{font:700 31px "Space Grotesk",sans-serif;letter-spacing:-1.1px;margin:9px 0 6
 .progress-stats>div:first-child svg{color:#29966b}.progress-stats>div:nth-child(2) svg{color:#c78c38}.progress-stats strong{font-size:13px;color:#273750}
 .current-symbol{display:flex;align-items:center;gap:7px;margin-top:15px;padding:10px 12px;border-radius:8px;background:#f1f6fd;color:#627895;font-size:11px}
 .current-symbol strong{color:#2d4e7a}
+.abort-button{margin-top:13px;min-width:170px}
 .failed-list{margin-top:12px;color:#9b6c32;font-size:11px}
 .failed-list summary{cursor:pointer;font-weight:700}.failed-list p{margin:7px 0 0;line-height:1.6;color:#8c785c}
 .completion-message{display:flex;align-items:center;gap:8px;margin-top:14px;padding:10px 12px;background:#eaf7ef;border-radius:8px;color:#287b56;font-size:11px;font-weight:600}
+.cancelled-message{display:flex;align-items:center;gap:8px;margin-top:14px;padding:10px 12px;background:#fff3e2;border-radius:8px;color:#98621d;font-size:11px;font-weight:600}
 .error-message{margin-top:12px;padding:10px 12px;background:#fff0ef;color:#b43c35;border-radius:8px;font-size:11px}
 .datasets-heading{margin-bottom:17px}
 .dataset-actions{display:grid;grid-template-columns:1fr 1fr;gap:13px}

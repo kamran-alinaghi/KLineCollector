@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
-import { getJob, hasRunningJob, startCollection, subscribeToJob } from "./services/collection.js";
+import { cancelCollection, getJob, hasRunningJob, startCollection, subscribeToJob } from "./services/collection.js";
 import { fetchActiveFuturesSymbols } from "./services/kucoin.js";
 import {
   getActiveDataset, getDatasetSummary, isTimeframe, listSavedDatasets,
@@ -70,6 +70,15 @@ export async function buildApp(): Promise<FastifyInstance> {
     } catch (error) {
       return sendError(reply, error, "Unable to start collection.", 400);
     }
+  });
+
+  app.post<{ Params: { jobId: string } }>("/api/jobs/:jobId/cancel", async (request, reply) => {
+    const job = cancelCollection(request.params.jobId);
+    if (!job) return reply.code(404).send({ error: "Collection job not found." });
+    if (job.status !== "pending" && job.status !== "running") {
+      return reply.code(409).send({ error: "This collection job is no longer running." });
+    }
+    return { accepted: true, job };
   });
 
   app.get<{ Params: { jobId: string } }>("/api/jobs/:jobId", async (request, reply) => {
