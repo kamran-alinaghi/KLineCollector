@@ -9,6 +9,7 @@ import type { CollectionJob, DatasetSummary, Timeframe } from "./types";
 import { TIMEFRAMES } from "./types";
 
 type Notice = { kind: "success" | "error" | "info"; message: string };
+const LAST_JOB_KEY = "kline-collector:last-job-id";
 const localDateTime = (date: Date) => {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
@@ -70,6 +71,7 @@ export default function App() {
     if (next.status === "completed" || next.status === "failed") {
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
+      window.localStorage.removeItem(LAST_JOB_KEY);
       void refreshDatasets().catch(() => undefined);
       if (next.status === "failed") {
         notify({ kind: "error", message: next.error ?? "The collection job failed." });
@@ -82,6 +84,34 @@ export default function App() {
       }
     }
   }, [notify, refreshDatasets]);
+
+  useEffect(() => {
+    const savedJobId = window.localStorage.getItem(LAST_JOB_KEY);
+    if (!savedJobId) return;
+    let cancelled = false;
+
+    void api.getJob(savedJobId).then((restored) => {
+      if (cancelled) return;
+      setJob(restored);
+      if (restored.status === "running" || restored.status === "pending") {
+        const source = new EventSource(api.jobEventsUrl(restored.jobId));
+        eventSourceRef.current = source;
+        source.addEventListener("progress", (event) => {
+          const update = JSON.parse((event as MessageEvent<string>).data) as CollectionJob;
+          applyJobUpdate(update);
+        });
+      } else {
+        window.localStorage.removeItem(LAST_JOB_KEY);
+      }
+    }).catch(() => {
+      if (!cancelled) window.localStorage.removeItem(LAST_JOB_KEY);
+    });
+
+    return () => {
+      cancelled = true;
+      eventSourceRef.current?.close();
+    };
+  }, [applyJobUpdate]);
 
   const startCollection = async () => {
     if (!startTime || !endTime) {
@@ -103,6 +133,7 @@ export default function App() {
         endTime: end.toISOString()
       });
       setJob(created);
+      window.localStorage.setItem(LAST_JOB_KEY, created.jobId);
       notify({ kind: "info", message: "KLine collection started. Progress will update automatically." });
       const source = new EventSource(api.jobEventsUrl(created.jobId));
       eventSourceRef.current = source;
@@ -137,6 +168,9 @@ export default function App() {
     setLoadingFile(filename);
     try {
       const result = await api.loadDataset(filename);
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+      window.localStorage.removeItem(LAST_JOB_KEY);
       setActiveDataset(result.dataset);
       setJob(null);
       notify({ kind: "success", message: `Loaded ${filename} into backend memory. The previous active dataset was replaced.` });
