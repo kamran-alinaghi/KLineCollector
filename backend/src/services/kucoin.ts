@@ -1,9 +1,9 @@
 import { config } from "../config.js";
-import type { KLine, Timeframe } from "../types.js";
+import type { FuturesSymbol, KLine, Timeframe } from "../types.js";
 import { TIMEFRAMES } from "../types.js";
 
 interface KucoinEnvelope<T> { code: string; data: T; msg?: string; }
-interface KucoinContract { symbol?: string; }
+interface KucoinContract { symbol?: string; multiplier?: number | string; }
 type RawKLine = Array<number | string>;
 
 let lastKlineRequestAt = 0;
@@ -56,11 +56,18 @@ async function kucoinGet<T>(
   return payload.data;
 }
 
-export async function fetchActiveFuturesSymbols(): Promise<string[]> {
+export async function fetchActiveFuturesSymbols(): Promise<FuturesSymbol[]> {
   const contracts = await kucoinGet<KucoinContract[]>("/api/v1/contracts/active");
-  return [...new Set(contracts
-    .filter((contract) => typeof contract.symbol === "string" && contract.symbol.length > 0)
-    .map((contract) => contract.symbol as string))].sort();
+  const bySymbol = new Map<string, FuturesSymbol>();
+  for (const contract of contracts) {
+    if (typeof contract.symbol !== "string" || contract.symbol.length === 0) continue;
+    const multiplier = Number(contract.multiplier);
+    if (!Number.isFinite(multiplier)) {
+      throw new Error(`KuCoin returned an invalid multiplier for ${contract.symbol}.`);
+    }
+    bySymbol.set(contract.symbol, { symbol: contract.symbol, multiplier });
+  }
+  return [...bySymbol.values()].sort((a, b) => a.symbol.localeCompare(b.symbol));
 }
 
 export async function fetchKLinesPage(

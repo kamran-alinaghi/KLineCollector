@@ -31,12 +31,13 @@ async function ensureDirectory(): Promise<void> {
 function validateDataset(value: unknown): value is KLineDataset {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<KLineDataset>;
-  if (candidate.schemaVersion !== 1 || typeof candidate.jobId !== "string") return false;
+  if (candidate.schemaVersion !== 2 || typeof candidate.jobId !== "string") return false;
   if (typeof candidate.timeframe !== "string" || !timeframeValues.has(candidate.timeframe)) return false;
   if (typeof candidate.startTime !== "string" || typeof candidate.endTime !== "string" || typeof candidate.createdAt !== "string") return false;
   if (!candidate.symbols || typeof candidate.symbols !== "object" || Array.isArray(candidate.symbols)) return false;
   return Object.values(candidate.symbols).every((entry) =>
-    !!entry && Array.isArray(entry.klines) && entry.klines.every((kline) =>
+    !!entry && typeof entry.multiplier === "number" && Number.isFinite(entry.multiplier) &&
+    Array.isArray(entry.klines) && entry.klines.every((kline) =>
       !!kline && ["timestamp", "open", "high", "low", "close", "volume", "turnover"]
         .every((key) => typeof (kline as Record<string, unknown>)[key] === "number" &&
           Number.isFinite((kline as Record<string, number>)[key]))

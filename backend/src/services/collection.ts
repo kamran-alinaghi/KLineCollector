@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { TIMEFRAMES, type CollectionJob, type CollectionRequest, type KLineDataset } from "../types.js";
+import { TIMEFRAMES, type CollectionJob, type CollectionRequest, type FuturesSymbol, type KLineDataset } from "../types.js";
 import { fetchKLinesPage } from "./kucoin.js";
 import { setActiveDataset } from "./dataset.js";
 
@@ -39,7 +39,7 @@ export function cancelCollection(jobId: string): CollectionJob | undefined {
   return getJob(jobId);
 }
 
-export function startCollection(request: CollectionRequest, symbols: string[]): CollectionJob {
+export function startCollection(request: CollectionRequest, symbols: FuturesSymbol[]): CollectionJob {
   if (runningJobId) throw new Error("A KLine collection is already running.");
   if (symbols.length === 0) throw new Error("Fetch active futures symbols before starting a collection.");
 
@@ -58,7 +58,7 @@ export function startCollection(request: CollectionRequest, symbols: string[]): 
   runningJobId = jobId;
 
   const dataset: KLineDataset = {
-    schemaVersion: 1, jobId, timeframe: request.timeframe,
+    schemaVersion: 2, jobId, timeframe: request.timeframe,
     startTime: request.startTime, endTime: request.endTime,
     createdAt: now(), symbols: {}
   };
@@ -70,7 +70,7 @@ export function startCollection(request: CollectionRequest, symbols: string[]): 
 }
 
 async function runCollection(
-  job: CollectionJob, dataset: KLineDataset, symbols: string[], signal: AbortSignal
+  job: CollectionJob, dataset: KLineDataset, symbols: FuturesSymbol[], signal: AbortSignal
 ): Promise<void> {
   try {
     job.status = "running";
@@ -80,8 +80,9 @@ async function runCollection(
     const intervalMs = TIMEFRAMES[job.timeframe] * 60_000;
     const pageSpanMs = intervalMs * 500;
 
-    for (const symbol of symbols) {
+    for (const contract of symbols) {
       if (signal.aborted) break;
+      const { symbol, multiplier } = contract;
       job.currentSymbol = symbol;
       publish(job);
 
@@ -99,6 +100,7 @@ async function runCollection(
         }
         if (signal.aborted) break;
         dataset.symbols[symbol] = {
+          multiplier,
           klines: [...byTimestamp.values()].sort((a, b) => a.timestamp - b.timestamp)
         };
         job.successfulSymbols += 1;

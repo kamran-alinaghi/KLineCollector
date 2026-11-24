@@ -14,9 +14,10 @@ export interface KLine {
   volume: number;
   turnover: number;
 }
-export interface SymbolKLines { klines: KLine[]; }
+export interface FuturesSymbol { symbol: string; multiplier: number; }
+export interface SymbolKLines { multiplier: number; klines: KLine[]; }
 export interface KLineDataset {
-  schemaVersion: 1;
+  schemaVersion: 2;
   jobId: string;
   timeframe: Timeframe;
   startTime: string;

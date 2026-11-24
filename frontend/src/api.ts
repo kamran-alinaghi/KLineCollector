@@ -19,7 +19,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload;
 }
 
-export interface SymbolResponse { symbols: string[]; count: number; fetchedAt?: string; fetched?: boolean; }
+export interface FuturesSymbol { symbol: string; multiplier: number; }
+export interface SymbolResponse { symbols: FuturesSymbol[]; count: number; fetchedAt?: string; fetched?: boolean; }
 export interface DatasetListResponse { datasets: DatasetSummary[]; }
 export interface ActiveDatasetResponse { dataset: DatasetSummary | null; }
 

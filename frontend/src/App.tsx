@@ -4,7 +4,7 @@ import {
   CheckCircle2, ChevronDown, Clock3, Database, FileJson, FolderOpen,
   LoaderCircle, RefreshCw, Save, Server, Signal, StopCircle, XCircle
 } from "lucide-react";
-import { api } from "./api";
+import { api, type FuturesSymbol } from "./api";
 import type { CollectionJob, DatasetSummary, Timeframe } from "./types";
 import { TIMEFRAMES } from "./types";
 
@@ -17,7 +17,7 @@ const formatDate = (value: string) => new Date(value).toLocaleString();
 const number = (value: number) => new Intl.NumberFormat().format(value);
 
 export default function App() {
-  const [symbols, setSymbols] = useState<string[]>([]);
+  const [symbols, setSymbols] = useState<FuturesSymbol[]>([]);
   const [symbolsLoading, setSymbolsLoading] = useState(false);
   const [timeframe, setTimeframe] = useState<Timeframe>("1hour");
   const [startTime, setStartTime] = useState(() => localDateTime(new Date(Date.now() - 24 * 60 * 60 * 1000)));
@@ -228,10 +228,10 @@ export default function App() {
               <button className="text-button" onClick={() => setShowSymbols((value) => !value)}>
                 {showSymbols ? "Hide symbol preview" : "Preview symbols"} <ChevronDown className={showSymbols ? "rotate" : ""} size={15} />
               </button>
-              {showSymbols && <div className="symbol-list">{symbols.slice(0, 24).map((symbol) => <span key={symbol}>{symbol}</span>)}{symbols.length > 24 && <span className="more-symbols">+{symbols.length - 24} more</span>}</div>}
+              {showSymbols && <div className="symbol-list">{symbols.slice(0, 24).map((contract) => <span key={contract.symbol} title={`Multiplier: ${contract.multiplier}`}>{contract.symbol} · ×{contract.multiplier}</span>)}{symbols.length > 24 && <span className="more-symbols">+{symbols.length - 24} more</span>}</div>}
             </div>
           )}
-          <div className="info-line"><Server size={15} /> Symbol list is fetched and held by the backend.</div>
+          <div className="info-line"><Server size={15} /> Symbol and multiplier data are cached by the backend.</div>
         </section>
 
         <section className="panel collect-panel">
