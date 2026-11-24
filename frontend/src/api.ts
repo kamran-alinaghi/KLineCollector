@@ -1,4 +1,4 @@
-import type { CollectionJob, DatasetSummary, Timeframe } from "./types";
+import type { CollectionJob, DatasetSummary, MovementAnalysisResponse, Timeframe } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -39,5 +39,8 @@ export const api = {
     request<{ accepted: boolean; job: CollectionJob }>(
       `/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" }
     ),
+  calculateMovements: (thresholdPercent: number) => request<MovementAnalysisResponse>(
+    "/api/analysis/movements", { method: "POST", body: JSON.stringify({ thresholdPercent }) }
+  ),
   jobEventsUrl: (jobId: string) => `${API_BASE}/api/jobs/${encodeURIComponent(jobId)}/events`
 };

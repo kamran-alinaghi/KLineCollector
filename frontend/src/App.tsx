@@ -7,6 +7,7 @@ import {
 import { api, type FuturesSymbol } from "./api";
 import type { CollectionJob, DatasetSummary, Timeframe } from "./types";
 import { TIMEFRAMES } from "./types";
+import MovementAnalysis from "./MovementAnalysis";
 
 type Notice = { kind: "success" | "error" | "info"; message: string };
 const localDateTime = (date: Date) => {
@@ -321,6 +322,8 @@ export default function App() {
           </div>
         </div>
       </section>
+
+      <MovementAnalysis hasActiveDataset={!!activeDataset} disabled={collectionRunning || saving || !!loadingFile} />
 
       <footer className="footer"><span>KLineCollector</span><span>Market data only · No order execution in this phase</span></footer>
     </main>

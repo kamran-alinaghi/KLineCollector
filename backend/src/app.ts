@@ -7,9 +7,11 @@ import {
   getActiveDataset, getDatasetSummary, isTimeframe, listSavedDatasets,
   loadSavedDataset, saveActiveDataset
 } from "./services/dataset.js";
-import type { CollectionRequest } from "./types.js";
+import type { CollectionRequest, FuturesSymbol } from "./types.js";
+import { analyzeDatasetMovements } from "./services/movement-analysis.js";
+import { analyzeDatasetMovements } from "./services/movement-analysis.js";
 
-let activeSymbols: string[] = [];
+let activeSymbols: FuturesSymbol[] = [];
 
 interface CollectBody {
   timeframe?: unknown;
@@ -115,6 +117,25 @@ export async function buildApp(): Promise<FastifyInstance> {
       clearInterval(heartbeat);
       unsubscribe();
     });
+  });
+
+
+  app.post<{ Body: { thresholdPercent?: unknown } }>("/api/analysis/movements", async (request, reply) => {
+    const dataset = getActiveDataset();
+    if (!dataset) return reply.code(409).send({ error: "Load or collect a dataset before running movement analysis." });
+    const thresholdPercent = request.body?.thresholdPercent;
+    if (typeof thresholdPercent !== "number" || !Number.isFinite(thresholdPercent) || thresholdPercent <= 0) {
+      return reply.code(400).send({ error: "Threshold percentage must be a positive number." });
+    }
+    try {
+      return {
+        thresholdPercent,
+        datasetJobId: dataset.jobId,
+        results: analyzeDatasetMovements(dataset, thresholdPercent)
+      };
+    } catch (error) {
+      return sendError(reply, error, "Unable to calculate price movements.", 400);
+    }
   });
 
   app.get("/api/datasets", async () => ({ datasets: await listSavedDatasets() }));

@@ -60,3 +60,15 @@ export interface CollectionRequest {
   startTime: string;
   endTime: string;
 }
+
+export interface MovementAnalysisRow {
+  symbol: string;
+  movements: number;
+  lastPrice: number | null;
+  multiplier: number;
+}
+export interface MovementAnalysisResponse {
+  thresholdPercent: number;
+  datasetJobId: string;
+  results: MovementAnalysisRow[];
+}

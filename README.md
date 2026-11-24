@@ -53,4 +53,4 @@ Symbols, jobs, and the active dataset are memory-only and are cleared on backend
 
 Collection body contains only `timeframe`, `startTime`, and `endTime`. The backend supplies its own symbol list.
 
-This phase does not implement analysis or order execution.
+## Phase 2: Price movement analysis\n- Analyze every symbol in the active in-memory dataset using KLine high prices only.\n- Accept a user-defined positive reversal threshold percentage.\n- Count directional legs when price advances by the threshold from a local low or reverses by the threshold from a local high; extensions in the same direction remain one movement. The initial direction is established when the first threshold-sized move occurs.\n- Return symbol, movement count, latest high price, and contract multiplier.\n- Sort and filter results in the frontend.\n\nThe movement analysis runs in the backend and does not modify the collected dataset. No order execution is implemented.
