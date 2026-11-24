@@ -47,6 +47,8 @@ export interface MovementAnalysisRow {
   movements: number;
   lastPrice: number | null;
   multiplier: number;
+  averageVolume: number;
+  result: number | null;
 }
 export interface MovementAnalysisResponse {
   thresholdPercent: number;

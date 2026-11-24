@@ -53,4 +53,13 @@ Symbols, jobs, and the active dataset are memory-only and are cleared on backend
 
 Collection body contains only `timeframe`, `startTime`, and `endTime`. The backend supplies its own symbol list.
 
-## Phase 2: Price movement analysis\n- Analyze every symbol in the active in-memory dataset using KLine high prices only.\n- Accept a user-defined positive reversal threshold percentage.\n- Count directional legs when price advances by the threshold from a local low or reverses by the threshold from a local high; extensions in the same direction remain one movement. The initial direction is established when the first threshold-sized move occurs.\n- Return symbol, movement count, latest high price, and contract multiplier.\n- Sort and filter results in the frontend.\n\nThe movement analysis runs in the backend and does not modify the collected dataset. No order execution is implemented.
+## Phase 2: Price movement analysis
+- Analyze every symbol in the active in-memory dataset using KLine high prices only for directional movement counts.
+- Accept a user-defined positive reversal threshold percentage.
+- Count directional legs when price advances by the threshold from a local low or reverses by the threshold from a local high; extensions in the same direction remain one movement.
+- Calculate average volume as the arithmetic mean of all candle `volume` values for that symbol.
+- Calculate the final result as `lastPrice * multiplier * averageVolume`, where `lastPrice` is the most recent candle's high.
+- Show symbol, movement count, last price, multiplier, average volume, and result in the table.
+- Support independent per-column filters; numeric columns accept exact values and `>`, `>=`, `<`, `<=` comparisons. All columns are sortable.
+
+Analysis runs in the backend and does not modify the collected dataset. No order execution is implemented.

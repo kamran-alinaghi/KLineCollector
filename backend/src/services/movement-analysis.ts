@@ -5,6 +5,8 @@ export interface MovementAnalysisRow {
   movements: number;
   lastPrice: number | null;
   multiplier: number;
+  averageVolume: number;
+  result: number | null;
 }
 
 /**
@@ -12,10 +14,7 @@ export interface MovementAnalysisRow {
  * the threshold. A reversal starts the next leg and is counted immediately.
  * Only KLine.high values are used.
  */
-export function calculateSymbolMovements(
-  highs: number[],
-  thresholdPercent: number
-): number {
+export function calculateSymbolMovements(highs: number[], thresholdPercent: number): number {
   if (!Number.isFinite(thresholdPercent) || thresholdPercent <= 0) {
     throw new Error("Threshold percentage must be a positive number.");
   }
@@ -31,7 +30,6 @@ export function calculateSymbolMovements(
 
   for (let index = 1; index < prices.length; index += 1) {
     const price = prices[index];
-
     if (direction === null) {
       initialLow = Math.min(initialLow, price);
       initialHigh = Math.max(initialHigh, price);
@@ -46,31 +44,24 @@ export function calculateSymbolMovements(
       }
       continue;
     }
-
     if (direction === "up") {
-      if (price > extreme) {
-        extreme = price;
-      } else if (price <= extreme * (1 - threshold)) {
+      if (price > extreme) extreme = price;
+      else if (price <= extreme * (1 - threshold)) {
         direction = "down";
         extreme = price;
         movements += 1;
       }
-    } else if (price < extreme) {
-      extreme = price;
-    } else if (price >= extreme * (1 + threshold)) {
+    } else if (price < extreme) extreme = price;
+    else if (price >= extreme * (1 + threshold)) {
       direction = "up";
       extreme = price;
       movements += 1;
     }
   }
-
   return movements;
 }
 
-export function analyzeDatasetMovements(
-  dataset: KLineDataset,
-  thresholdPercent: number
-): MovementAnalysisRow[] {
+export function analyzeDatasetMovements(dataset: KLineDataset, thresholdPercent: number): MovementAnalysisRow[] {
   if (!Number.isFinite(thresholdPercent) || thresholdPercent <= 0) {
     throw new Error("Threshold percentage must be a positive number.");
   }
@@ -78,11 +69,18 @@ export function analyzeDatasetMovements(
   return Object.entries(dataset.symbols).map(([symbol, data]) => {
     const sortedKlines = [...data.klines].sort((a, b) => a.timestamp - b.timestamp);
     const highs = sortedKlines.map((kline) => kline.high);
+    const validVolumes = sortedKlines.map((kline) => kline.volume).filter((volume) => Number.isFinite(volume));
+    const averageVolume = validVolumes.length
+      ? validVolumes.reduce((sum, volume) => sum + volume, 0) / validVolumes.length
+      : 0;
+    const lastPrice = highs.length ? highs[highs.length - 1] : null;
     return {
       symbol,
       movements: calculateSymbolMovements(highs, thresholdPercent),
-      lastPrice: highs.length ? highs[highs.length - 1] : null,
-      multiplier: data.multiplier
+      lastPrice,
+      multiplier: data.multiplier,
+      averageVolume,
+      result: lastPrice === null ? null : lastPrice * data.multiplier * averageVolume
     };
   }).sort((a, b) => b.movements - a.movements || a.symbol.localeCompare(b.symbol));
 }

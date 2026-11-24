@@ -1,35 +1,65 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, BarChart3, LoaderCircle, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, BarChart3, LoaderCircle } from "lucide-react";
 import { api } from "./api";
 import type { MovementAnalysisRow } from "./types";
 
-type SortKey = "symbol" | "movements" | "lastPrice" | "multiplier";
+type ColumnKey = "symbol" | "movements" | "lastPrice" | "multiplier" | "averageVolume" | "result";
 type SortDirection = "asc" | "desc";
+type Filters = Record<ColumnKey, string>;
 
-const formatPrice = (value: number | null) => value === null
+const EMPTY_FILTERS: Filters = {
+  symbol: "", movements: "", lastPrice: "", multiplier: "", averageVolume: "", result: ""
+};
+const formatValue = (value: number | null) => value === null
   ? "—"
   : new Intl.NumberFormat(undefined, { maximumFractionDigits: 12 }).format(value);
-const formatNumber = (value: number) => new Intl.NumberFormat().format(value);
+const formatCount = (value: number) => new Intl.NumberFormat().format(value);
+const columns: { key: ColumnKey; label: string; numeric: boolean; placeholder: string }[] = [
+  { key: "symbol", label: "Symbol", numeric: false, placeholder: "Contains…" },
+  { key: "movements", label: "Number of movements", numeric: true, placeholder: "e.g. >= 5" },
+  { key: "lastPrice", label: "Last price", numeric: true, placeholder: "e.g. > 100" },
+  { key: "multiplier", label: "Multiplier", numeric: true, placeholder: "e.g. = 0.001" },
+  { key: "averageVolume", label: "Average volume", numeric: true, placeholder: "e.g. >= 1000" },
+  { key: "result", label: "Result", numeric: true, placeholder: "e.g. > 10000" }
+];
 
-interface Props {
-  hasActiveDataset: boolean;
-  disabled: boolean;
+interface Props { hasActiveDataset: boolean; disabled: boolean; }
+
+function matchesNumericFilter(value: number | null, expression: string): boolean {
+  if (!expression.trim()) return true;
+  if (value === null) return false;
+  const match = expression.trim().match(/^(>=|<=|>|<|=)?\s*(-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)$/i);
+  if (!match) return false;
+  const operator = match[1] ?? "=";
+  const target = Number(match[2]);
+  if (!Number.isFinite(target)) return false;
+  switch (operator) {
+    case ">": return value > target;
+    case ">=": return value >= target;
+    case "<": return value < target;
+    case "<=": return value <= target;
+    default: return value === target;
+  }
 }
 
 export default function MovementAnalysis({ hasActiveDataset, disabled }: Props) {
   const [threshold, setThreshold] = useState("10");
   const [results, setResults] = useState<MovementAnalysisRow[] | null>(null);
   const [appliedThreshold, setAppliedThreshold] = useState<number | null>(null);
-  const [filter, setFilter] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("movements");
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [sortKey, setSortKey] = useState<ColumnKey>("movements");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const visibleResults = useMemo(() => {
     if (!results) return [];
-    const query = filter.trim().toLowerCase();
-    return results.filter((row) => row.symbol.toLowerCase().includes(query)).sort((a, b) => {
+    return results.filter((row) => {
+      if (!row.symbol.toLowerCase().includes(filters.symbol.trim().toLowerCase())) return false;
+      return columns.filter((column) => column.numeric).every((column) =>
+        matchesNumericFilter(row[column.key] as number | null, filters[column.key])
+      );
+    }).sort((a, b) => {
       const left = a[sortKey];
       const right = b[sortKey];
       let comparison = 0;
@@ -39,7 +69,7 @@ export default function MovementAnalysis({ hasActiveDataset, disabled }: Props) 
       else comparison = Number(left) - Number(right);
       return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [filter, results, sortDirection, sortKey]);
+  }, [filters, results, sortDirection, sortKey]);
 
   const calculate = async () => {
     const value = Number(threshold);
@@ -53,6 +83,7 @@ export default function MovementAnalysis({ hasActiveDataset, disabled }: Props) 
       const response = await api.calculateMovements(value);
       setResults(response.results);
       setAppliedThreshold(response.thresholdPercent);
+      setFilters(EMPTY_FILTERS);
       setSortKey("movements");
       setSortDirection("desc");
     } catch (reason) {
@@ -62,7 +93,7 @@ export default function MovementAnalysis({ hasActiveDataset, disabled }: Props) 
     }
   };
 
-  const changeSort = (key: SortKey) => {
+  const changeSort = (key: ColumnKey) => {
     if (sortKey === key) setSortDirection((current) => current === "asc" ? "desc" : "asc");
     else {
       setSortKey(key);
@@ -70,18 +101,11 @@ export default function MovementAnalysis({ hasActiveDataset, disabled }: Props) 
     }
   };
 
-  const heading = (key: SortKey, label: string) => (
-    <button className="movement-sort" onClick={() => changeSort(key)} aria-label={`Sort by ${label}`}>
-      {label}
-      {sortKey === key && (sortDirection === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />)}
-    </button>
-  );
-
   return (
     <section className="panel movement-panel">
       <div className="panel-heading">
         <div className="section-icon purple"><BarChart3 size={18} /></div>
-        <div><h2>Price movement analysis</h2><p>Count directional movements using KLine high prices only.</p></div>
+        <div><h2>Price movement analysis</h2><p>Analyze directional movements, average volume, and the calculated contract result.</p></div>
       </div>
       <div className="movement-controls">
         <label className="field movement-threshold">
@@ -93,38 +117,48 @@ export default function MovementAnalysis({ hasActiveDataset, disabled }: Props) 
           {calculating ? "Calculating…" : "Calculate movements"}
         </button>
       </div>
-      <p className="helper-text movement-explanation">A movement is counted when price advances at least the threshold from a local low or reverses at least the threshold from a local high. Continued movement in the same direction is counted once.</p>
+      <p className="helper-text movement-explanation">A movement is counted when price advances at least the threshold from a local low or reverses at least the threshold from a local high. Average volume is the arithmetic mean of all candle volume values in the active dataset. Result = last price × multiplier × average volume.</p>
       {!hasActiveDataset && <p className="empty-copy movement-empty">Collect or load a dataset before running analysis.</p>}
       {error && <div className="error-message">{error}</div>}
       {results && <>
         <div className="movement-results-meta">
-          <strong>{formatNumber(results.length)} symbols analyzed</strong>
+          <strong>{formatCount(results.length)} symbols analyzed</strong>
           <span>Threshold: {appliedThreshold}%</span>
+          <button className="movement-clear-filters" onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</button>
         </div>
-        <label className="movement-filter">
-          <Search size={16} />
-          <input type="search" placeholder="Filter by symbol…" value={filter} onChange={(event) => setFilter(event.target.value)} />
-          <span>{formatNumber(visibleResults.length)} shown</span>
-        </label>
         <div className="movement-table-wrap">
           <table className="movement-table">
-            <thead><tr>
-              <th>{heading("symbol", "Symbol")}</th>
-              <th className="numeric">{heading("movements", "Number of movements")}</th>
-              <th className="numeric">{heading("lastPrice", "Last price")}</th>
-              <th className="numeric">{heading("multiplier", "Multiplier")}</th>
-            </tr></thead>
+            <thead>
+              <tr>{columns.map((column) => (
+                <th key={column.key} className={column.numeric ? "numeric" : undefined}>
+                  <button className="movement-sort" onClick={() => changeSort(column.key)}>
+                    {column.label}
+                    {sortKey === column.key && (sortDirection === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />)}
+                  </button>
+                  <input
+                    className={`movement-column-filter ${column.numeric ? "numeric" : ""}`}
+                    aria-label={`Filter ${column.label}`}
+                    placeholder={column.placeholder}
+                    value={filters[column.key]}
+                    onChange={(event) => setFilters((current) => ({ ...current, [column.key]: event.target.value }))}
+                  />
+                </th>
+              ))}</tr>
+            </thead>
             <tbody>
               {visibleResults.map((row) => <tr key={row.symbol}>
                 <td className="movement-symbol">{row.symbol}</td>
-                <td className="numeric">{formatNumber(row.movements)}</td>
-                <td className="numeric">{formatPrice(row.lastPrice)}</td>
-                <td className="numeric">{formatPrice(row.multiplier)}</td>
+                <td className="numeric">{formatCount(row.movements)}</td>
+                <td className="numeric">{formatValue(row.lastPrice)}</td>
+                <td className="numeric">{formatValue(row.multiplier)}</td>
+                <td className="numeric">{formatValue(row.averageVolume)}</td>
+                <td className="numeric">{formatValue(row.result)}</td>
               </tr>)}
-              {visibleResults.length === 0 && <tr><td colSpan={4} className="movement-no-results">No matching symbols.</td></tr>}
+              {visibleResults.length === 0 && <tr><td colSpan={6} className="movement-no-results">No rows match the current filters.</td></tr>}
             </tbody>
           </table>
         </div>
+        <p className="helper-text">Numeric filters support exact values and comparisons: =, &gt;, &gt;=, &lt;, &lt;= (for example, &gt;= 1000).</p>
       </>}
     </section>
   );
