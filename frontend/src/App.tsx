@@ -182,9 +182,9 @@ export default function App() {
         <div>
           <div className="eyebrow"><Activity size={14} /> MARKET DATA MANAGEMENT</div>
           <h1>Collection workspace</h1>
-          <p>Fetch active futures contracts, collect historical candles, and manage saved datasets.</p>
+          <p>Collect historical candles, analyze price movements, and manage saved datasets.</p>
         </div>
-        <div className="phase-chip"><span /> Phase 1 · Data collection</div>
+        <div className="phase-chip"><span /> Phase 1 + 2 · Collection & analysis</div>
       </section>
 
       {notice && (
@@ -323,7 +323,7 @@ export default function App() {
         </div>
       </section>
 
-      <MovementAnalysis hasActiveDataset={!!activeDataset} disabled={collectionRunning || saving || !!loadingFile} />
+      <MovementAnalysis key={activeDataset?.jobId ?? "no-active-dataset"} hasActiveDataset={!!activeDataset} disabled={collectionRunning || saving || !!loadingFile} />
 
       <footer className="footer"><span>KLineCollector</span><span>Market data only · No order execution in this phase</span></footer>
     </main>
