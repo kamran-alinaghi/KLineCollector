@@ -68,3 +68,6 @@ Thumbs.db
 
 # npm package archives
 *.tgz
+
+# Saved KLine datasets
+backend/data/klines/
