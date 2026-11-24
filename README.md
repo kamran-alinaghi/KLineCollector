@@ -13,12 +13,12 @@ npm run dev
 ```
 Frontend: http://localhost:5173. API: http://localhost:3001.
 
-Copy `backend/.env.example` to `backend/.env` to configure ports, CORS, KuCoin URL, symbol delay, and dataset directory.
+Copy `backend/.env.example` to `backend/.env` to configure ports, CORS, KuCoin URL, KLine request delay, and dataset directory.
 
 ## Phase 1
 - Manually fetch all tradable KuCoin Futures contracts.
 - Collect KLines for every backend-cached symbol with a selected timeframe and date range.
-- Process symbols sequentially with a configurable 20-second delay between symbols.
+- Process symbols sequentially with a configurable 20-second minimum interval between KLine API requests (including pagination), which also spaces out requests for consecutive symbols.
 - Page KLine requests into windows of up to 500 intervals.
 - Stream job progress over SSE.
 - Skip failed symbols and continue.
@@ -33,7 +33,7 @@ Copy `backend/.env.example` to `backend/.env` to configure ports, CORS, KuCoin U
 KLine `granularity` is in minutes and `from`/`to` use milliseconds. KuCoin documents a maximum of 500 candles per response. Empty intervals may be omitted when there are no trades.
 
 ## Runtime behavior
-Symbols, jobs, and the active dataset are memory-only and are cleared on backend restart. Saved files live in `backend/data/klines` and are git-ignored. Collection never saves automatically. One collection job runs at a time. The delay is applied between symbols, not before the first symbol.
+Symbols, jobs, and the active dataset are memory-only and are cleared on backend restart. Saved files live in `backend/data/klines` and are git-ignored. Collection never saves automatically. One collection job runs at a time. The first KLine request starts immediately; subsequent KLine requests are spaced by the configured delay. This also throttles pagination requests for the same symbol.
 
 ## API
 - GET /api/health

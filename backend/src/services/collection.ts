@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { config } from "../config.js";
 import { TIMEFRAMES, type CollectionJob, type CollectionRequest, type KLineDataset } from "../types.js";
 import { fetchKLinesPage } from "./kucoin.js";
 import { setActiveDataset } from "./dataset.js";
@@ -29,10 +28,6 @@ export function subscribeToJob(jobId: string, listener: (job: CollectionJob) => 
 }
 
 export function hasRunningJob(): boolean { return runningJobId !== null; }
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export function startCollection(request: CollectionRequest, symbols: string[]): CollectionJob {
   if (runningJobId) throw new Error("A KLine collection is already running.");
@@ -77,7 +72,6 @@ async function runCollection(job: CollectionJob, dataset: KLineDataset, symbols:
   const pageSpanMs = intervalMs * 500;
 
   for (let index = 0; index < symbols.length; index += 1) {
-    if (index > 0 && config.symbolRequestDelayMs > 0) await wait(config.symbolRequestDelayMs);
     const symbol = symbols[index]!;
     job.currentSymbol = symbol;
     publish(job);

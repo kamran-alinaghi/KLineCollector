@@ -6,6 +6,17 @@ interface KucoinEnvelope<T> { code: string; data: T; msg?: string; }
 interface KucoinContract { symbol?: string; }
 type RawKLine = Array<number | string>;
 
+let lastKlineRequestAt = 0;
+
+async function waitForKlineRequestSlot(): Promise<void> {
+  const elapsed = Date.now() - lastKlineRequestAt;
+  const remaining = config.kucoinKlineRequestDelayMs - elapsed;
+  if (lastKlineRequestAt > 0 && remaining > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remaining));
+  }
+  lastKlineRequestAt = Date.now();
+}
+
 async function kucoinGet<T>(endpoint: string, params?: Record<string, string | number>): Promise<T> {
   const url = new URL(endpoint, config.kucoinBaseUrl);
   for (const [key, value] of Object.entries(params ?? {})) url.searchParams.set(key, String(value));
@@ -30,6 +41,7 @@ export async function fetchActiveFuturesSymbols(): Promise<string[]> {
 export async function fetchKLinesPage(
   symbol: string, timeframe: Timeframe, fromMs: number, toMs: number
 ): Promise<KLine[]> {
+  await waitForKlineRequestSlot();
   const rows = await kucoinGet<RawKLine[]>("/api/v1/kline/query", {
     symbol, granularity: TIMEFRAMES[timeframe], from: fromMs, to: toMs
   });

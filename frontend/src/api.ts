@@ -21,7 +21,6 @@ export const api = {
   refreshSymbols: () => request<SymbolResponse>("/api/symbols/refresh", { method: "POST" }),
   getDatasets: () => request<DatasetListResponse>("/api/datasets"),
   getActiveDataset: () => request<ActiveDatasetResponse>("/api/datasets/active"),
-  getJob: (jobId: string) => request<CollectionJob>(`/api/jobs/${encodeURIComponent(jobId)}`),
   saveDataset: () => request<{ dataset: DatasetSummary }>("/api/datasets/save", { method: "POST" }),
   loadDataset: (filename: string) => request<{ dataset: DatasetSummary }>(
     `/api/datasets/${encodeURIComponent(filename)}/load`, { method: "POST" }
