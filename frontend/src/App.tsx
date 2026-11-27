@@ -58,6 +58,7 @@ export default function App() {
   const changeExchange = async (nextExchange: ExchangeId) => {
     setExchange(nextExchange);
     setSymbols([]);
+    setSymbolsLoading(true);
     const available = TIMEFRAMES_BY_EXCHANGE[nextExchange] as readonly { value: Timeframe; label: string }[];
     if (!available.some((item) => item.value === timeframe)) setTimeframe("1hour");
     try {
@@ -65,6 +66,8 @@ export default function App() {
       setSymbols(result.symbols);
     } catch {
       // The user can fetch the selected exchange's symbols with the button.
+    } finally {
+      setSymbolsLoading(false);
     }
   };
 
