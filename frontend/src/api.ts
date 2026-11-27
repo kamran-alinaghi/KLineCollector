@@ -1,4 +1,4 @@
-import type { CollectionJob, DatasetSummary, MovementAnalysisResponse, Timeframe } from "./types";
+import type { CollectionJob, DatasetSummary, ExchangeId, MovementAnalysisResponse, Timeframe } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -25,15 +25,15 @@ export interface DatasetListResponse { datasets: DatasetSummary[]; }
 export interface ActiveDatasetResponse { dataset: DatasetSummary | null; }
 
 export const api = {
-  getSymbols: () => request<SymbolResponse>("/api/symbols"),
-  refreshSymbols: () => request<SymbolResponse>("/api/symbols/refresh", { method: "POST" }),
+  getSymbols: (exchange: ExchangeId) => request<SymbolResponse>(`/api/symbols?exchange=${exchange}`),
+  refreshSymbols: (exchange: ExchangeId) => request<SymbolResponse>("/api/symbols/refresh", { method: "POST", body: JSON.stringify({ exchange }) }),
   getDatasets: () => request<DatasetListResponse>("/api/datasets"),
   getActiveDataset: () => request<ActiveDatasetResponse>("/api/datasets/active"),
   saveDataset: () => request<{ dataset: DatasetSummary }>("/api/datasets/save", { method: "POST" }),
   loadDataset: (filename: string) => request<{ dataset: DatasetSummary }>(
     `/api/datasets/${encodeURIComponent(filename)}/load`, { method: "POST" }
   ),
-  startCollection: (input: { timeframe: Timeframe; startTime: string; endTime: string }) =>
+  startCollection: (input: { exchange: ExchangeId; timeframe: Timeframe; startTime: string; endTime: string }) =>
     request<CollectionJob>("/api/klines/collect", { method: "POST", body: JSON.stringify(input) }),
   cancelCollection: (jobId: string) =>
     request<{ accepted: boolean; job: CollectionJob }>(

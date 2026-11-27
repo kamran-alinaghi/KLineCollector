@@ -146,3 +146,5 @@ h1{font:700 31px "Space Grotesk",sans-serif;letter-spacing:-1.1px;margin:9px 0 6
 .movement-column-filter.numeric{text-align:right}
 .movement-table th.numeric .movement-sort{justify-content:flex-end;width:100%}
 @media(max-width:600px){.movement-results-meta{align-items:flex-start}.movement-column-filter{min-width:110px}}
+
+.exchange-field{margin-bottom:13px}

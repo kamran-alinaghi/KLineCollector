@@ -5,8 +5,8 @@ import {
   LoaderCircle, RefreshCw, Save, Server, Signal, StopCircle, XCircle
 } from "lucide-react";
 import { api, type FuturesSymbol } from "./api";
-import type { CollectionJob, DatasetSummary, Timeframe } from "./types";
-import { TIMEFRAMES } from "./types";
+import type { CollectionJob, DatasetSummary, ExchangeId, Timeframe } from "./types";
+import { EXCHANGES, TIMEFRAMES_BY_EXCHANGE } from "./types";
 import MovementAnalysis from "./MovementAnalysis";
 
 type Notice = { kind: "success" | "error" | "info"; message: string };
@@ -18,6 +18,7 @@ const formatDate = (value: string) => new Date(value).toLocaleString();
 const number = (value: number) => new Intl.NumberFormat().format(value);
 
 export default function App() {
+  const [exchange, setExchange] = useState<ExchangeId>("kraken");
   const [symbols, setSymbols] = useState<FuturesSymbol[]>([]);
   const [symbolsLoading, setSymbolsLoading] = useState(false);
   const [timeframe, setTimeframe] = useState<Timeframe>("1hour");
@@ -43,7 +44,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void api.getSymbols().then((result) => setSymbols(result.symbols)).catch(() => undefined);
+    void api.getSymbols("kraken").then((result) => setSymbols(result.symbols)).catch(() => undefined);
     void refreshDatasets().catch(() => undefined);
     return () => eventSourceRef.current?.close();
   }, [refreshDatasets]);
@@ -54,12 +55,25 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
+  const changeExchange = async (nextExchange: ExchangeId) => {
+    setExchange(nextExchange);
+    setSymbols([]);
+    const available = TIMEFRAMES_BY_EXCHANGE[nextExchange] as readonly { value: Timeframe; label: string }[];
+    if (!available.some((item) => item.value === timeframe)) setTimeframe("1hour");
+    try {
+      const result = await api.getSymbols(nextExchange);
+      setSymbols(result.symbols);
+    } catch {
+      // The user can fetch the selected exchange's symbols with the button.
+    }
+  };
+
   const fetchSymbols = async () => {
     setSymbolsLoading(true);
     try {
-      const result = await api.refreshSymbols();
+      const result = await api.refreshSymbols(exchange);
       setSymbols(result.symbols);
-      notify({ kind: "success", message: `Loaded ${number(result.count)} active futures contracts from KuCoin.` });
+      notify({ kind: "success", message: `Loaded ${number(result.count)} active futures contracts from ${EXCHANGES.find((item) => item.value === exchange)?.label}.` });
     } catch (error) {
       notify({ kind: "error", message: error instanceof Error ? error.message : "Unable to fetch symbols." });
     } finally {
@@ -103,6 +117,7 @@ export default function App() {
     eventSourceRef.current?.close();
     try {
       const created = await api.startCollection({
+        exchange,
         timeframe,
         startTime: start.toISOString(),
         endTime: end.toISOString()
@@ -166,7 +181,7 @@ export default function App() {
 
   const collectionRunning = job?.status === "running" || job?.status === "pending";
   const canSave = !!activeDataset && !collectionRunning && !saving;
-  const currentTimeframe = TIMEFRAMES.find((item) => item.value === (activeDataset?.timeframe ?? job?.timeframe))?.label;
+  const currentTimeframe = (TIMEFRAMES_BY_EXCHANGE[activeDataset?.exchange ?? exchange] as readonly { value: Timeframe; label: string }[]).find((item) => item.value === (activeDataset?.timeframe ?? job?.timeframe))?.label;
 
   return (
     <main className="app-shell">
@@ -175,7 +190,7 @@ export default function App() {
           <span className="brand-mark"><BarChart3 size={21} /></span>
           <span>KLine<span className="brand-light">Collector</span></span>
         </a>
-        <div className="topbar-right"><span className="connection-dot" /> KuCoin Futures <span className="environment-tag">DATA WORKSPACE</span></div>
+        <div className="topbar-right"><span className="connection-dot" /> {EXCHANGES.find((item) => item.value === exchange)?.label} <span className="environment-tag">DATA WORKSPACE</span></div>
       </header>
 
       <section className="page-heading">
@@ -214,8 +229,13 @@ export default function App() {
         <section className="panel symbols-panel">
           <div className="panel-heading">
             <div className="section-icon"><Activity size={18} /></div>
-            <div><h2>Futures symbols</h2><p>Retrieve all currently tradable KuCoin Futures contracts.</p></div>
+            <div><h2>Futures symbols</h2><p>Retrieve currently tradable contracts from the selected exchange.</p></div>
           </div>
+          <label className="field exchange-field"><span>Exchange platform</span>
+            <select value={exchange} onChange={(event) => void changeExchange(event.target.value as ExchangeId)} disabled={collectionRunning || symbolsLoading}>
+              {EXCHANGES.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
+            </select>
+          </label>
           <div className="symbol-summary">
             <div><span className="muted-label">Backend symbol cache</span><strong>{symbols.length ? `${number(symbols.length)} symbols` : "Not loaded yet"}</strong></div>
             <span className={symbols.length ? "status-pill status-ready" : "status-pill"}>{symbols.length ? "Ready" : "Waiting"}</span>
@@ -229,10 +249,10 @@ export default function App() {
               <button className="text-button" onClick={() => setShowSymbols((value) => !value)}>
                 {showSymbols ? "Hide symbol preview" : "Preview symbols"} <ChevronDown className={showSymbols ? "rotate" : ""} size={15} />
               </button>
-              {showSymbols && <div className="symbol-list">{symbols.slice(0, 24).map((contract) => <span key={contract.symbol} title={`Multiplier: ${contract.multiplier}`}>{contract.symbol} · ×{contract.multiplier}</span>)}{symbols.length > 24 && <span className="more-symbols">+{symbols.length - 24} more</span>}</div>}
+              {showSymbols && <div className="symbol-list">{symbols.slice(0, 24).map((contract) => <span key={contract.symbol} title={`Contract size / multiplier: ${contract.multiplier}`}>{contract.symbol} · ×{contract.multiplier}</span>)}{symbols.length > 24 && <span className="more-symbols">+{symbols.length - 24} more</span>}</div>}
             </div>
           )}
-          <div className="info-line"><Server size={15} /> Symbol and multiplier data are cached by the backend.</div>
+          <div className="info-line"><Server size={15} /> Symbol and contract-size metadata are cached separately for each exchange.</div>
         </section>
 
         <section className="panel collect-panel">
@@ -243,7 +263,7 @@ export default function App() {
           <div className="form-grid">
             <label className="field field-full"><span>Timeframe</span>
               <select value={timeframe} onChange={(event) => setTimeframe(event.target.value as Timeframe)} disabled={collectionRunning}>
-                {TIMEFRAMES.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
+                {TIMEFRAMES_BY_EXCHANGE[exchange].map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
               </select>
             </label>
             <label className="field"><span>Start date &amp; time</span><input type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} disabled={collectionRunning} /></label>
@@ -297,7 +317,7 @@ export default function App() {
           <div className="active-dataset-card">
             <div className="dataset-card-title"><Database size={17} /><strong>Active in-memory dataset</strong></div>
             {activeDataset ? <>
-              <div className="dataset-metrics"><span><strong>{number(activeDataset.symbolCount)}</strong> symbols</span><span><strong>{number(activeDataset.klineCount)}</strong> KLines</span><span>{currentTimeframe ?? activeDataset.timeframe}</span></div>
+              <div className="dataset-metrics"><span><strong>{number(activeDataset.symbolCount)}</strong> symbols</span><span><strong>{number(activeDataset.klineCount)}</strong> KLines</span><span>{activeDataset.exchange} · {currentTimeframe ?? activeDataset.timeframe}</span></div>
               <p className="dataset-dates">{formatDate(activeDataset.startTime)} — {formatDate(activeDataset.endTime)}</p>
             </> : <p className="empty-copy">No active dataset. Complete a collection or load a saved file.</p>}
             <button className="button button-primary full-width" onClick={saveDataset} disabled={!canSave}>
@@ -312,7 +332,7 @@ export default function App() {
               <div className="saved-list">{datasets.map((dataset) => (
                 <div className="saved-item" key={dataset.filename}>
                   <div className="saved-file-icon"><FileJson size={17} /></div>
-                  <div className="saved-file-info"><strong>{dataset.filename}</strong><span>{dataset.timeframe} · {dataset.symbolCount} symbols · {number(dataset.klineCount)} candles</span><small>{formatDate(dataset.createdAt)}</small></div>
+                  <div className="saved-file-info"><strong>{dataset.filename}</strong><span>{dataset.exchange} · {dataset.timeframe} · {dataset.symbolCount} symbols · {number(dataset.klineCount)} candles</span><small>{formatDate(dataset.createdAt)}</small></div>
                   <button className="button button-outline button-small" onClick={() => void loadDataset(dataset.filename!)} disabled={!!loadingFile || collectionRunning}>
                     {loadingFile === dataset.filename ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}
                     Load

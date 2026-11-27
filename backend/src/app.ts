@@ -2,24 +2,35 @@ import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import { config } from "./config.js";
 import { cancelCollection, getJob, hasRunningJob, startCollection, subscribeToJob } from "./services/collection.js";
-import { fetchActiveFuturesSymbols } from "./services/kucoin.js";
+import { getExchangeProvider, isExchangeId } from "./services/providers.js";
 import {
   getActiveDataset, getDatasetSummary, isTimeframe, listSavedDatasets,
   loadSavedDataset, saveActiveDataset
 } from "./services/dataset.js";
-import type { CollectionRequest, FuturesSymbol } from "./types.js";
+import type { CollectionRequest, ExchangeId, FuturesSymbol, Timeframe } from "./types.js";
 import { analyzeDatasetMovements } from "./services/movement-analysis.js";
 
-let activeSymbols: FuturesSymbol[] = [];
+const activeSymbolsByExchange = new Map<ExchangeId, FuturesSymbol[]>();
+const DEFAULT_EXCHANGE: ExchangeId = "kraken";
+function parseExchange(value: unknown): ExchangeId {
+  if (value === undefined || value === null || value === "") return DEFAULT_EXCHANGE;
+  if (!isExchangeId(value)) throw new Error("Choose a supported exchange.");
+  return value;
+}
+function isTimeframeForExchange(value: unknown, exchange: ExchangeId): value is Timeframe {
+  return isTimeframe(value) && getExchangeProvider(exchange).supportsTimeframe(value);
+}
 
 interface CollectBody {
+  exchange?: unknown;
   timeframe?: unknown;
   startTime?: unknown;
   endTime?: unknown;
 }
 
 function parseCollectionRequest(body: CollectBody): CollectionRequest {
-  if (!isTimeframe(body.timeframe)) throw new Error("Choose a supported KLine timeframe.");
+  const exchange = parseExchange(body.exchange);
+  if (!isTimeframeForExchange(body.timeframe, exchange)) throw new Error(`Choose a timeframe supported by ${getExchangeProvider(exchange).label}.`);
   if (typeof body.startTime !== "string" || typeof body.endTime !== "string") {
     throw new Error("Start time and end time are required.");
   }
@@ -30,7 +41,7 @@ function parseCollectionRequest(body: CollectBody): CollectionRequest {
   }
   if (start.getTime() >= end.getTime()) throw new Error("Start time must be earlier than end time.");
   if (end.getTime() > Date.now() + 60_000) throw new Error("End time cannot be in the future.");
-  return { timeframe: body.timeframe, startTime: start.toISOString(), endTime: end.toISOString() };
+  return { exchange, timeframe: body.timeframe, startTime: start.toISOString(), endTime: end.toISOString() };
 }
 
 function sendError(reply: FastifyReply, error: unknown, fallback: string, status = 502) {
@@ -47,26 +58,31 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   app.get("/api/health", async () => ({ status: "ok" }));
 
-  app.get("/api/symbols", async () => ({
-    symbols: activeSymbols,
-    count: activeSymbols.length,
-    fetched: activeSymbols.length > 0
-  }));
+  app.get<{ Querystring: { exchange?: string } }>("/api/symbols", async (request, reply) => {
+    let exchange: ExchangeId;
+    try { exchange = parseExchange(request.query.exchange); }
+    catch (error) { return sendError(reply, error, "Unsupported exchange.", 400); }
+    const symbols = activeSymbolsByExchange.get(exchange) ?? [];
+    return { exchange, symbols, count: symbols.length, fetched: symbols.length > 0 };
+  });
 
-  app.post("/api/symbols/refresh", async (_request, reply) => {
+  app.post<{ Body: { exchange?: unknown } }>("/api/symbols/refresh", async (request, reply) => {
     try {
-      const symbols = await fetchActiveFuturesSymbols();
-      activeSymbols = symbols;
-      return { symbols, count: symbols.length, fetchedAt: new Date().toISOString() };
+      const exchange = parseExchange(request.body?.exchange);
+      const provider = getExchangeProvider(exchange);
+      const symbols = await provider.fetchSymbols();
+      activeSymbolsByExchange.set(exchange, symbols);
+      return { exchange, symbols, count: symbols.length, fetchedAt: new Date().toISOString() };
     } catch (error) {
-      return sendError(reply, error, "Unable to fetch active KuCoin Futures symbols.");
+      return sendError(reply, error, "Unable to fetch active exchange symbols.");
     }
   });
 
   app.post<{ Body: CollectBody }>("/api/klines/collect", async (request, reply) => {
     try {
       const collectionRequest = parseCollectionRequest(request.body ?? {});
-      const job = startCollection(collectionRequest, activeSymbols);
+      const symbols = activeSymbolsByExchange.get(collectionRequest.exchange) ?? [];
+      const job = startCollection(collectionRequest, symbols);
       return reply.code(202).send(job);
     } catch (error) {
       return sendError(reply, error, "Unable to start collection.", 400);

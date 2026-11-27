@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import type { FuturesSymbol, KLine, Timeframe } from "../types.js";
+import type { ExchangeProvider } from "./exchange-provider.js";
 import { TIMEFRAMES } from "../types.js";
 
 interface KucoinEnvelope<T> { code: string; data: T; msg?: string; }
@@ -85,3 +86,8 @@ export async function fetchKLinesPage(
     return { timestamp, open, high, low, close, volume, turnover };
   }).sort((a, b) => a.timestamp - b.timestamp);
 }
+
+export const kucoinProvider: ExchangeProvider = {
+  id: "kucoin", label: "KuCoin Futures", supportsTimeframe: () => true,
+  fetchSymbols: fetchActiveFuturesSymbols, fetchKLinesPage
+};

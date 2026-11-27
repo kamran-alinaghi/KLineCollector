@@ -13,5 +13,7 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
   kucoinBaseUrl: (process.env.KUCOIN_FUTURES_BASE_URL ?? "https://api-futures.kucoin.com").replace(/\/$/, ""),
   kucoinKlineRequestDelayMs: integer(process.env.KUCOIN_KLINE_REQUEST_DELAY_MS, 20_000),
+  krakenBaseUrl: (process.env.KRAKEN_FUTURES_BASE_URL ?? "https://futures.kraken.com").replace(/\/$/, ""),
+  krakenKlineRequestDelayMs: integer(process.env.KRAKEN_KLINE_REQUEST_DELAY_MS, 1_000),
   dataDirectory: path.resolve(process.cwd(), process.env.DATA_DIRECTORY ?? "./data/klines")
 };
